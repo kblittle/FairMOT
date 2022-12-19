@@ -20,7 +20,7 @@ from .base_trainer import BaseTrainer
 
 
 class MotLoss(torch.nn.Module):
-    def __init__(self, opt):
+    def __init__(self, opt, classifier):
         super(MotLoss, self).__init__()
         self.crit = torch.nn.MSELoss() if opt.mse_loss else FocalLoss()
         self.crit_reg = RegL1Loss() if opt.reg_loss == 'l1' else \
@@ -31,12 +31,13 @@ class MotLoss(torch.nn.Module):
         self.opt = opt
         self.emb_dim = opt.reid_dim
         self.nID = opt.nID
-        self.classifier = nn.Linear(self.emb_dim, self.nID)
-        if opt.id_loss == 'focal':
-            torch.nn.init.normal_(self.classifier.weight, std=0.01)
-            prior_prob = 0.01
-            bias_value = -math.log((1 - prior_prob) / prior_prob)
-            torch.nn.init.constant_(self.classifier.bias, bias_value)
+        # self.classifier = nn.Linear(self.emb_dim, self.nID)  # 这个参数需要额外保存到model中，修改save_model
+        self.classifier = classifier[0]
+        # if opt.id_loss == 'focal':
+        #     torch.nn.init.normal_(self.classifier.weight, std=0.01)
+        #     prior_prob = 0.01
+        #     bias_value = -math.log((1 - prior_prob) / prior_prob)
+        #     torch.nn.init.constant_(self.classifier.bias, bias_value)
         self.IDLoss = nn.CrossEntropyLoss(ignore_index=-1)
         self.emb_scale = math.sqrt(2) * math.log(self.nID - 1)
         self.s_det = nn.Parameter(-1.85 * torch.ones(1))
@@ -90,12 +91,12 @@ class MotLoss(torch.nn.Module):
 
 
 class MotTrainer(BaseTrainer):
-    def __init__(self, opt, model, optimizer=None):
-        super(MotTrainer, self).__init__(opt, model, optimizer=optimizer)
+    def __init__(self, opt, model, classifier, optimizer=None):
+        super(MotTrainer, self).__init__(opt, model, classifier, optimizer=optimizer)
 
-    def _get_losses(self, opt):
+    def _get_losses(self, opt, classifier):
         loss_states = ['loss', 'hm_loss', 'wh_loss', 'off_loss', 'id_loss']
-        loss = MotLoss(opt)
+        loss = MotLoss(opt, classifier)
         return loss_states, loss
 
     def save_result(self, output, batch, results):

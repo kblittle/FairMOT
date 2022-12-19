@@ -44,7 +44,9 @@ There has been remarkable progress on object detection and re-identification in 
 ```
 conda create -n FairMOT
 conda activate FairMOT
-conda install pytorch==1.7.0 torchvision==0.8.0 cudatoolkit=10.2 -c pytorch
+
+[//]: # (conda install pytorch==1.7.0 torchvision==0.8.0 cudatoolkit=10.2 -c pytorch)
+conda install pytorch==1.7.0 torchvision==0.8.0 torchaudio==0.7.0 cudatoolkit=11.0 -c pytorch
 cd ${FAIRMOT_ROOT}
 pip install cython
 pip install -r requirements.txt

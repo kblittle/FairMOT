@@ -1,0 +1,15 @@
+{
+    "root":"/media/fc/Elements SE",
+    "train":
+    {
+        "mot17":"./data/sportsmot_data.train"
+    },
+    "test_emb":
+    {
+        "mot17":"./data/sportsmot_data.val"
+    },
+    "test":
+    {
+        "mot17":"./data/sportsmot_data.test"
+    }
+}

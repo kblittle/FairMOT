@@ -68,11 +68,11 @@ def mot_decode(heat, wh, reg=None, ltrb=False, K=100):
         wh = wh.view(batch, K, 2)
     clses = clses.view(batch, K, 1).float()
     scores = scores.view(batch, K, 1)
-    if ltrb:
-        bboxes = torch.cat([xs - wh[..., 0:1],
-                            ys - wh[..., 1:2],
-                            xs + wh[..., 2:3],
-                            ys + wh[..., 3:4]], dim=2)
+    if ltrb:# 预测边界框中心点距离两个角落的距离，left top right bottom，
+        bboxes = torch.cat([xs - wh[..., 0:1], #中心点的x坐标减去到左上角点的left值
+                            ys - wh[..., 1:2], #中心点的x坐标减去到左上角点的top值
+                            xs + wh[..., 2:3], #中心点的x坐标减去到左上角点的right值
+                            ys + wh[..., 3:4]], dim=2) #中心点的x坐标减去到左上角点的bottom值
     else:
         bboxes = torch.cat([xs - wh[..., 0:1] / 2,
                             ys - wh[..., 1:2] / 2,

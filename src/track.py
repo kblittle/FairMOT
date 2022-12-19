@@ -260,12 +260,101 @@ if __name__ == '__main__':
                       MOT20-08
                       '''
         data_root = os.path.join(opt.data_dir, 'MOT20/images/test')
+
+    if opt.val_sportsmot:
+        seqs_str = '''  v_00HRwkvvjtQ_c001
+                        v_00HRwkvvjtQ_c003
+                        v_00HRwkvvjtQ_c005
+                        v_00HRwkvvjtQ_c007
+                        v_00HRwkvvjtQ_c008
+                        v_00HRwkvvjtQ_c011
+                        v_4r8QL_wglzQ_c001
+                        v_5ekaksddqrc_c001
+                        v_5ekaksddqrc_c002
+                        v_5ekaksddqrc_c003
+                        v_5ekaksddqrc_c004
+                        v_5ekaksddqrc_c005
+                        v_BgwzTUxJaeU_c008
+                        v_BgwzTUxJaeU_c012
+                        v_BgwzTUxJaeU_c014
+                        v_0kUtTtmLaJA_c004
+                        v_0kUtTtmLaJA_c005
+                        v_0kUtTtmLaJA_c006
+                        v_0kUtTtmLaJA_c007
+                        v_0kUtTtmLaJA_c008
+                        v_0kUtTtmLaJA_c010
+                        v_4-EmEtrturE_c009
+                        v_9MHDmAMxO5I_c002
+                        v_9MHDmAMxO5I_c003
+                        v_9MHDmAMxO5I_c004
+                        v_9MHDmAMxO5I_c006
+                        v_9MHDmAMxO5I_c009
+                        v_cC2mHWqMcjk_c007
+                        v_cC2mHWqMcjk_c008
+                        v_cC2mHWqMcjk_c009
+                        v_2QhNRucNC7E_c017
+                        v_dw7LOz17Omg_c053
+                        v_dw7LOz17Omg_c067
+                        v_G-vNjfx1GGc_c004
+                        v_G-vNjfx1GGc_c008
+                        v_G-vNjfx1GGc_c600
+                        v_G-vNjfx1GGc_c601
+                        v_i2_L4qquVg0_c006
+                        v_i2_L4qquVg0_c007
+                        v_i2_L4qquVg0_c009
+                        v_i2_L4qquVg0_c010
+                        v_ITo3sCnpw_k_c007
+                        v_ITo3sCnpw_k_c010
+                        v_ITo3sCnpw_k_c011
+                        v_ITo3sCnpw_k_c012
+                      '''
+        data_root = os.path.join(opt.data_dir, 'sportsmot/images/val')
+    if opt.val_sportsmot_data:
+        seqs_str = '''  v_00HRwkvvjtQ_c003  
+                        v_00HRwkvvjtQ_c008  
+                        v_0kUtTtmLaJA_c005  
+                        v_0kUtTtmLaJA_c010  
+                        v_4LXTUim5anY_c010  
+                        v_4LXTUim5anY_c012  
+                        v_4LXTUim5anY_c013  
+                        v_5ekaksddqrc_c002  
+                        v_9MHDmAMxO5I_c003  
+                        v_9MHDmAMxO5I_c004  
+                        v_9MHDmAMxO5I_c006  
+                        v_Dk3EpDDa3o0_c007  
+                        v_G-vNjfx1GGc_c601  
+                        v_gQNyhv8y0QY_c012  
+                        v_gQNyhv8y0QY_c013  
+                        v_HdiyOtliFiw_c008  
+                        v_i2_L4qquVg0_c006  
+                        v_ITo3sCnpw_k_c010 
+                      '''
+        data_root = os.path.join(opt.data_dir, 'sportsmot_data/images/val')
+    if opt.test_sportsmot_data:
+        seqs_str = '''  v_1LwtoLPw2TU_c012  
+                        v_2j7kLB-vEEk_c001  
+                        v_2j7kLB-vEEk_c009  
+                        v_2j7kLB-vEEk_c010  
+                        v_ApPxnw_Jffg_c016  
+                        v_cC2mHWqMcjk_c008  
+                        v_G-vNjfx1GGc_c004  
+                        v_HdiyOtliFiw_c003  
+                        v_i2_L4qquVg0_c010
+                        '''
+        data_root = os.path.join(opt.data_dir, 'sportsmot_data/images/test')
     seqs = [seq.strip() for seq in seqs_str.split()]
 
     main(opt,
          data_root=data_root,
          seqs=seqs,
-         exp_name='MOT17_test_public_dla34',
+         exp_name='sporstsdata_test_ch_hrnet18_byte_epoch25_buffer150',
          show_image=False,
          save_images=False,
          save_videos=False)
+    # main(opt,
+    #      data_root=data_root,
+    #      seqs=seqs,
+    #      exp_name='sportsmot_data_val_public_hrnet18_byte',
+    #      show_image=False,
+    #      save_images=False,
+    #      save_videos=False)

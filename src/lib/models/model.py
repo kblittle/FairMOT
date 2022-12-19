@@ -7,22 +7,22 @@ import torch
 import torch.nn as nn
 import os
 
-from .networks.dlav0 import get_pose_net as get_dlav0
-from .networks.pose_dla_dcn import get_pose_net as get_dla_dcn
-from .networks.resnet_dcn import get_pose_net as get_pose_net_dcn
-from .networks.resnet_fpn_dcn import get_pose_net as get_pose_net_fpn_dcn
+# from .networks.dlav0 import get_pose_net as get_dlav0
+# from .networks.pose_dla_dcn import get_pose_net as get_dla_dcn
+# from .networks.resnet_dcn import get_pose_net as get_pose_net_dcn
+# from .networks.resnet_fpn_dcn import get_pose_net as get_pose_net_fpn_dcn
 from .networks.pose_hrnet import get_pose_net as get_pose_net_hrnet
-from .networks.pose_dla_conv import get_pose_net as get_dla_conv
-from .yolo import get_pose_net as get_pose_net_yolo
+# from .networks.pose_dla_conv import get_pose_net as get_dla_conv
+# from .yolo import get_pose_net as get_pose_net_yolo
 
 _model_factory = {
-  'dlav0': get_dlav0, # default DLAup
-  'dla': get_dla_dcn,
-  'dlaconv': get_dla_conv,
-  'resdcn': get_pose_net_dcn,
-  'resfpndcn': get_pose_net_fpn_dcn,
+#   'dlav0': get_dlav0, # default DLAup
+#   'dla': get_dla_dcn,
+#   'dlaconv': get_dla_conv,
+#   'resdcn': get_pose_net_dcn,
+#   'resfpndcn': get_pose_net_fpn_dcn,
   'hrnet': get_pose_net_hrnet,
-  'yolo': get_pose_net_yolo
+#   'yolo': get_pose_net_yolo
 }
 
 def create_model(arch, heads, head_conv):
@@ -32,13 +32,14 @@ def create_model(arch, heads, head_conv):
   model = get_model(num_layers=num_layers, heads=heads, head_conv=head_conv)
   return model
 
-def load_model(model, model_path, optimizer=None, resume=False, 
+def load_model(model,model_path, classifier=None, optimizer=None, resume=False,
                lr=None, lr_step=None):
   start_epoch = 0
   checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
   print('loaded {}, epoch {}'.format(model_path, checkpoint['epoch']))
   state_dict_ = checkpoint['state_dict']
   state_dict = {}
+
   
   # convert data_parallal to model
   for k in state_dict_:
@@ -47,6 +48,7 @@ def load_model(model, model_path, optimizer=None, resume=False,
     else:
       state_dict[k] = state_dict_[k]
   model_state_dict = model.state_dict()
+
 
   # check loaded parameters and created model parameters
   msg = 'If you see this, your model does not fully load the ' + \
@@ -68,6 +70,36 @@ def load_model(model, model_path, optimizer=None, resume=False,
       state_dict[k] = model_state_dict[k]
   model.load_state_dict(state_dict, strict=False)
 
+  # load classifier for track
+  if classifier is not None:
+
+    classifier_dict_ = checkpoint['classifier_dict']
+    classifier_dict = {}
+
+    for k in classifier_dict_:
+      if k.startswith('module') and not k.startswith('module_list'):
+        classifier_dict[k[7:]] = classifier_dict_[k]
+      else:
+        classifier_dict[k] = classifier_dict_[k]
+    classifier_state_dict = classifier.state_dict()
+
+    for k in classifier_dict:
+      if k in classifier_state_dict:
+        if classifier_dict[k].shape != classifier_state_dict[k].shape:
+          print('Skip loading parameter {}, required shape{}, '\
+                'loaded shape{}. {}'.format(
+            k, classifier_state_dict[k].shape, classifier_dict[k].shape, msg))
+          classifier_dict[k] = classifier_state_dict[k]
+      else:
+        print('Drop parameter {}.'.format(k) + msg)
+    for k in classifier_state_dict:
+      if not (k in classifier_dict):
+        print('No param {}.'.format(k) + msg)
+        classifier_dict[k] = classifier_state_dict[k]
+    classifier.load_state_dict(classifier_dict, strict=False)
+
+
+
   # resume optimizer parameters
   if optimizer is not None and resume:
     if 'optimizer' in checkpoint:
@@ -82,18 +114,23 @@ def load_model(model, model_path, optimizer=None, resume=False,
       print('Resumed optimizer with start lr', start_lr)
     else:
       print('No optimizer parameters in checkpoint.')
+
   if optimizer is not None:
-    return model, optimizer, start_epoch
+    return model,classifier, optimizer, start_epoch
+  elif classifier is not None:
+    return model, classifier
   else:
     return model
 
-def save_model(path, epoch, model, optimizer=None):
+def save_model(path, epoch, model, classifier,optimizer=None):
   if isinstance(model, torch.nn.DataParallel):
     state_dict = model.module.state_dict()
   else:
     state_dict = model.state_dict()
+  classifier_dict = classifier.state_dict()
   data = {'epoch': epoch,
-          'state_dict': state_dict}
+          'state_dict': state_dict,
+          'classifier_dict': classifier_dict}
   if not (optimizer is None):
     data['optimizer'] = optimizer.state_dict()
   torch.save(data, path)

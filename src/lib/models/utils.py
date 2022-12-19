@@ -9,7 +9,7 @@ def _sigmoid(x):
   y = torch.clamp(x.sigmoid_(), min=1e-4, max=1-1e-4)
   return y
 
-def _gather_feat(feat, ind, mask=None):
+def _gather_feat(feat, ind, mask=None): #获取对应index的特征值
     dim  = feat.size(2)
     ind  = ind.unsqueeze(2).expand(ind.size(0), ind.size(1), dim)
     feat = feat.gather(1, ind)

@@ -5,10 +5,12 @@ from __future__ import print_function
 import _init_paths
 
 import os
+import math
 
 import json
 import torch
 import torch.utils.data
+import torch.nn as nn
 from torchvision.transforms import transforms as T
 from opts import opts
 from models.model import create_model, load_model, save_model
@@ -41,6 +43,12 @@ def main(opt):
 
     print('Creating model...')
     model = create_model(opt.arch, opt.heads, opt.head_conv)
+    classifier = nn.Sequential(nn.Linear(opt.reid_dim, opt.nID))  # 这个参数需要额外保存到model中，修改save_model 参考mot.py line34
+    if opt.id_loss == 'focal':
+        torch.nn.init.normal_(classifier[0].weight, std=0.01)
+        prior_prob = 0.01
+        bias_value = -math.log((1 - prior_prob) / prior_prob)
+        torch.nn.init.constant_(classifier[0].bias, bias_value)
     optimizer = torch.optim.Adam(model.parameters(), opt.lr)
     start_epoch = 0
 
@@ -57,12 +65,15 @@ def main(opt):
 
     print('Starting training...')
     Trainer = train_factory[opt.task]
-    trainer = Trainer(opt, model, optimizer)
+    trainer = Trainer(opt, model, classifier, optimizer)
+    # trainer = Trainer(opt, model, optimizer)
     trainer.set_device(opt.gpus, opt.chunk_sizes, opt.device)
 
     if opt.load_model != '':
-        model, optimizer, start_epoch = load_model(
-            model, opt.load_model, trainer.optimizer, opt.resume, opt.lr, opt.lr_step)
+        # model, optimizer, start_epoch = load_model(
+        #     model, opt.load_model, trainer.optimizer, opt.resume, opt.lr, opt.lr_step)
+        model, classifier,optimizer, start_epoch = load_model(
+            model,  opt.load_model, classifier,trainer.optimizer, opt.resume, opt.lr, opt.lr_step)
 
     for epoch in range(start_epoch + 1, opt.num_epochs + 1):
         mark = epoch if opt.save_all else 'last'
@@ -74,21 +85,21 @@ def main(opt):
 
         if opt.val_intervals > 0 and epoch % opt.val_intervals == 0:
             save_model(os.path.join(opt.save_dir, 'model_{}.pth'.format(mark)),
-                       epoch, model, optimizer)
+                       epoch, model, classifier, optimizer)
         else:
             save_model(os.path.join(opt.save_dir, 'model_last.pth'),
-                       epoch, model, optimizer)
+                       epoch, model, classifier, optimizer)
         logger.write('\n')
         if epoch in opt.lr_step:
             save_model(os.path.join(opt.save_dir, 'model_{}.pth'.format(epoch)),
-                       epoch, model, optimizer)
+                       epoch, model, classifier, optimizer)
             lr = opt.lr * (0.1 ** (opt.lr_step.index(epoch) + 1))
             print('Drop LR to', lr)
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
-        if epoch % 5 == 0 or epoch >= 25:
+        if epoch % 5 == 0 :
             save_model(os.path.join(opt.save_dir, 'model_{}.pth'.format(epoch)),
-                       epoch, model, optimizer)
+                       epoch, model, classifier, optimizer)
     logger.close()
 
 

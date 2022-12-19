@@ -13,6 +13,7 @@ label_root = '/data/yfzhang/MOT/JDE/MOT20/labels_with_ids/train'
 mkdirs(label_root)
 seqs = [s for s in os.listdir(seq_root)]
 
+
 tid_curr = 0
 tid_last = -1
 for seq in seqs:
@@ -41,3 +42,9 @@ for seq in seqs:
             tid_curr, x / seq_width, y / seq_height, w / seq_width, h / seq_height)
         with open(label_fpath, 'a') as f:
             f.write(label_str)
+
+
+
+
+
+
