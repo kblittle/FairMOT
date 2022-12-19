@@ -1,0 +1,15 @@
+{
+    "root":"/workspace",
+    "train":
+    {
+        "mot17":"./data/sportsmot.train"
+    },
+    "test_emb":
+    {
+        "mot17":"./data/sportsmot.val"
+    },
+    "test":
+    {
+        "mot17":"./data/sportsmot.val"
+    }
+}
