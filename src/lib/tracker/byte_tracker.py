@@ -1,35 +1,28 @@
+import numpy as np
+from collections import deque
 import itertools
 import os
 import os.path as osp
 import time
-from collections import deque
-
-import cv2
-import timm
-import numpy as np
 import torch
+import cv2
 import torch.nn.functional as F
-from models import *
-from PIL import Image
-import matplotlib.pyplot as plt
-import torchvision.transforms as transforms
-from models.decode import mot_decode
+
 from models.model import create_model, load_model
-from models.utils import _tranpose_and_gather_feat
-from tracking_utils.kalman_filter import KalmanFilter
-from tracking_utils.log import logger
+from models.decode import mot_decode
 from tracking_utils.utils import *
-from utils.image import get_affine_transform
-from utils.post_process import ctdet_post_process
-
+from tracking_utils.log import logger
+from tracking_utils.kalman_filter import KalmanFilter
+from models import *
 from tracker import matching
-
 from .basetrack import BaseTrack, TrackState
-
+from utils.post_process import ctdet_post_process
+from utils.image import get_affine_transform
+from models.utils import _tranpose_and_gather_feat
 
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
-    def __init__(self, tlwh, score, temp_feat, buffer_size=30,temp_number_feat=None):
+    def __init__(self, tlwh, score):
 
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float)
@@ -39,40 +32,6 @@ class STrack(BaseTrack):
 
         self.score = score
         self.tracklet_len = 0
-
-        self.smooth_feat = None
-        self.features = deque([], maxlen=buffer_size)
-        self.update_features(temp_feat)
-        self.alpha = 0.9
-
-        self.temp_number_feat=temp_number_feat
-        if self.temp_number_feat is not None:
-            self.smooth_number_feat = None
-            self.number_features = deque([], maxlen=buffer_size)
-            self.update_number_features(self.temp_number_feat)
-        else:
-            self.smooth_number_feat = None
-            self.number_features = None
-
-    def update_features(self, feat):
-        feat /= np.linalg.norm(feat)
-        self.curr_feat = feat
-        if self.smooth_feat is None:
-            self.smooth_feat = feat
-        else:
-            self.smooth_feat = self.alpha * self.smooth_feat + (1 - self.alpha) * feat
-        self.features.append(feat)
-        self.smooth_feat /= np.linalg.norm(self.smooth_feat)
-
-    def update_number_features(self, feat):
-        feat /= np.linalg.norm(feat)
-        self.curr_number_feat = feat
-        if self.smooth_number_feat is None:
-            self.smooth_number_feat = feat
-        else:
-            self.smooth_number_feat = self.alpha * self.smooth_number_feat + (1 - self.alpha) * feat
-        self.number_features.append(feat)
-        self.smooth_number_feat /= np.linalg.norm(self.smooth_number_feat)
 
     def predict(self):
         mean_state = self.mean.copy()
@@ -112,17 +71,15 @@ class STrack(BaseTrack):
             self.mean, self.covariance, self.tlwh_to_xyah(new_track.tlwh)
         )
 
-        self.update_features(new_track.curr_feat)
-        if self.temp_number_feat is not None:
-            self.update_number_features(new_track.curr_number_feat)
         self.tracklet_len = 0
         self.state = TrackState.Tracked
         self.is_activated = True
         self.frame_id = frame_id
         if new_id:
             self.track_id = self.next_id()
+        self.score = new_track.score
 
-    def update(self, new_track, frame_id, update_feature=True):
+    def update(self, new_track, frame_id):
         """
         Update a matched track
         :type new_track: STrack
@@ -140,12 +97,9 @@ class STrack(BaseTrack):
         self.is_activated = True
 
         self.score = new_track.score
-        if update_feature:
-            self.update_features(new_track.curr_feat)
-            if self.temp_number_feat is not None:
-                self.update_number_features(new_track.curr_number_feat)
 
     @property
+    # @jit(nopython=True)
     def tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
                 width, height)`.
@@ -158,6 +112,7 @@ class STrack(BaseTrack):
         return ret
 
     @property
+    # @jit(nopython=True)
     def tlbr(self):
         """Convert bounding box to format `(min x, min y, max x, max y)`, i.e.,
         `(top left, bottom right)`.
@@ -167,6 +122,7 @@ class STrack(BaseTrack):
         return ret
 
     @staticmethod
+    # @jit(nopython=True)
     def tlwh_to_xyah(tlwh):
         """Convert bounding box to format `(center x, center y, aspect ratio,
         height)`, where the aspect ratio is `width / height`.
@@ -180,12 +136,14 @@ class STrack(BaseTrack):
         return self.tlwh_to_xyah(self.tlwh)
 
     @staticmethod
+    # @jit(nopython=True)
     def tlbr_to_tlwh(tlbr):
         ret = np.asarray(tlbr).copy()
         ret[2:] -= ret[:2]
         return ret
 
     @staticmethod
+    # @jit(nopython=True)
     def tlwh_to_tlbr(tlwh):
         ret = np.asarray(tlwh).copy()
         ret[2:] += ret[:2]
@@ -195,7 +153,7 @@ class STrack(BaseTrack):
         return 'OT_{}_({}-{})'.format(self.track_id, self.start_frame, self.end_frame)
 
 
-class JDETracker(object):
+class BYTETracker(object):
     def __init__(self, opt, frame_rate=30):
         self.opt = opt
         if opt.gpus[0] >= 0:
@@ -208,18 +166,13 @@ class JDETracker(object):
         self.model = self.model.to(opt.device)
         self.model.eval()
 
-        # create number model
-        self.number_model = timm.create_model("efficientnet_b0", pretrained=False, num_classes=100)
-        self.number_model = load_model(self.number_model, opt.load_number_model)
-        self.number_model = self.number_model.to(opt.device)
-        self.number_model.eval()
-
         self.tracked_stracks = []  # type: list[STrack]
         self.lost_stracks = []  # type: list[STrack]
         self.removed_stracks = []  # type: list[STrack]
 
         self.frame_id = 0
-        self.det_thresh = opt.conf_thres
+        #self.det_thresh = opt.conf_thres
+        self.det_thresh = opt.conf_thres + 0.1
         self.buffer_size = int(frame_rate / 30.0 * opt.track_buffer)
         self.max_time_lost = self.buffer_size
         self.max_per_image = opt.K
@@ -276,82 +229,24 @@ class JDETracker(object):
             output = self.model(im_blob)[-1]
             hm = output['hm'].sigmoid_()
             wh = output['wh']
-            id_feature = output['id']
-            id_feature = F.normalize(id_feature, dim=1)
 
             reg = output['reg'] if self.opt.reg_offset else None
             dets, inds = mot_decode(hm, wh, reg=reg, ltrb=self.opt.ltrb, K=self.opt.K)
-            id_feature = _tranpose_and_gather_feat(id_feature, inds)
-            id_feature = id_feature.squeeze(0)
-            id_feature = id_feature.cpu().numpy()
 
         dets = self.post_process(dets, meta)
         dets = self.merge_outputs([dets])[1]
 
         remain_inds = dets[:, 4] > self.opt.conf_thres
+        inds_low = dets[:, 4] > 0.2
+        inds_high = dets[:, 4] < self.opt.conf_thres
+        inds_second = np.logical_and(inds_low, inds_high)
+        dets_second = dets[inds_second]
         dets = dets[remain_inds]
-        id_feature = id_feature[remain_inds]
 
-        # vis
-        # '''
-        # for i in range(0, dets.shape[0]):
-        #     bbox = dets[i][0:4]#ltrb
-        #     cv2.rectangle(img0, (int(bbox[0]), int(bbox[1])),
-        #                   (int(bbox[2]), int(bbox[3])),
-        #                   (0, 255, 0), 2)
-        #     height=bbox[3]-bbox[1]
-        #     width=bbox[2]-bbox[0]
-        #     left = width / 10+bbox[0]
-        #     right =9* width / 10+bbox[0]
-        #     top = height / 5+bbox[1]
-        #     bottom =  height / 2+bbox[1]
-        #     cv2.rectangle(img0, (int(left), int(top)),
-        #                   (int(right),int(bottom)),
-        #                   (255, 0, 0), 2)
-        #     # number_image=
-        #     img_temp=Image.fromarray(img0)
-        #     image_crop = img_temp.crop((left, top, right, bottom))
-        #     image_resize = image_crop.resize((64, 64))
-        #     # plt.imshow( image_resize)
-        #     # plt.show()
-        #     # cv2.waitKey(0)
-        # cv2.imshow('dets', img0)
-        # cv2.waitKey(0)
-        # id0 = id0-1
-        # '''
-        number_feature_list=[]
         if len(dets) > 0:
             '''Detections'''
-            if self.opt.fuse_number:
-                for i in range(0, dets.shape[0]):
-                    # get number image
-                    bbox = dets[i][0:4]  # ltrb
-                    height = bbox[3] - bbox[1]
-                    width = bbox[2] - bbox[0]
-                    left = width / 10 + bbox[0]
-                    right = 9 * width / 10 + bbox[0]
-                    top = height / 5 + bbox[1]
-                    bottom = height / 2 + bbox[1]
-                    number_image = Image.fromarray(img0)
-                    image_crop = number_image.crop((left, top, right, bottom))
-                    image_resize = image_crop.resize((64, 64))
-                    transform = transforms.ToTensor()
-
-                    # get number feature
-                    number_image = transform(image_resize)
-                    number_image = torch.unsqueeze(number_image, 0)
-                    with torch.no_grad():
-                        number_feature_temp =self.number_model.forward_features(number_image.to(self.opt.device))
-                    number_feature_temp_flatten=number_feature_temp.flatten().cpu()
-                    number_feature_list.append(number_feature_temp_flatten)
-                number_feature=torch.stack(number_feature_list,dim=0)
-                number_feature = F.normalize(number_feature, dim=1)
-                number_feature=number_feature.numpy()
-                detections = [STrack(STrack.tlbr_to_tlwh(tlbrs[:4]), tlbrs[4], f, 30,number_f) for
-                              (tlbrs, f,number_f) in zip(dets[:, :5], id_feature,number_feature)] #dets:[bboxes, scores, clses]
-            else:
-                detections = [STrack(STrack.tlbr_to_tlwh(tlbrs[:4]), tlbrs[4], f, 30) for
-                              (tlbrs, f) in zip(dets[:, :5], id_feature)]  # dets:[bboxes, scores, clses]
+            detections = [STrack(STrack.tlbr_to_tlwh(tlbrs[:4]), tlbrs[4]) for
+                          tlbrs in dets[:, :5]]
         else:
             detections = []
 
@@ -364,24 +259,12 @@ class JDETracker(object):
             else:
                 tracked_stracks.append(track)
 
-        ''' Step 2: First association, with embedding'''
+        ''' Step 2: First association, with IOU'''
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
         # Predict the current location with KF
-        #for strack in strack_pool:
-            #strack.predict()
         STrack.multi_predict(strack_pool)
-        dists = matching.embedding_distance(strack_pool, detections)
-        if self.opt.fuse_number:
-            number_dists=matching.number_embedding_distance(strack_pool, detections)
-            dists = matching.fuse_motion(self.kalman_filter, dists, strack_pool, detections,
-                                         lambda_id=self.opt.lambda_id,lambda_motion=self.opt.lambda_motion,number_cost_matrix=number_dists)
-        else:
-            dists = matching.fuse_motion(self.kalman_filter, dists,strack_pool, detections,
-                                         lambda_id=self.opt.lambda_id,lambda_motion=self.opt.lambda_motion)
-
-        #dists = matching.iou_distance(strack_pool, detections)
-
-        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=0.4)
+        dists = matching.iou_distance(strack_pool, detections)
+        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.opt.match_thres)
 
         for itracked, idet in matches:
             track = strack_pool[itracked]
@@ -393,15 +276,19 @@ class JDETracker(object):
                 track.re_activate(det, self.frame_id, new_id=False)
                 refind_stracks.append(track)
 
-        ''' Step 3: Second association, with IOU'''
-        detections = [detections[i] for i in u_detection]
+        # association the untrack to the low score detections
+        if len(dets_second) > 0:
+            '''Detections'''
+            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbrs[:4]), tlbrs[4]) for
+                                 tlbrs in dets_second[:, :5]]
+        else:
+            detections_second = []
         r_tracked_stracks = [strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.Tracked]
-        dists = matching.iou_distance(r_tracked_stracks, detections)
-        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=0.5)
-
+        dists = matching.iou_distance(r_tracked_stracks, detections_second)
+        matches, u_track, u_detection_second = matching.linear_assignment(dists, thresh=0.4)
         for itracked, idet in matches:
             track = r_tracked_stracks[itracked]
-            det = detections[idet]
+            det = detections_second[idet]
             if track.state == TrackState.Tracked:
                 track.update(det, self.frame_id)
                 activated_starcks.append(track)
@@ -450,6 +337,7 @@ class JDETracker(object):
         self.lost_stracks = sub_stracks(self.lost_stracks, self.removed_stracks)
         self.removed_stracks.extend(removed_stracks)
         self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
+        #self.tracked_stracks = remove_fp_stracks(self.tracked_stracks)
         # get scores of lost tracks
         output_stracks = [track for track in self.tracked_stracks if track.is_activated]
 
@@ -501,3 +389,15 @@ def remove_duplicate_stracks(stracksa, stracksb):
     resa = [t for i, t in enumerate(stracksa) if not i in dupa]
     resb = [t for i, t in enumerate(stracksb) if not i in dupb]
     return resa, resb
+
+
+def remove_fp_stracks(stracksa, n_frame=10):
+    remain = []
+    for t in stracksa:
+        score_5 = t.score_list[-n_frame:]
+        score_5 = np.array(score_5, dtype=np.float32)
+        index = score_5 < 0.45
+        num = np.sum(index)
+        if num < n_frame:
+            remain.append(t)
+    return remain

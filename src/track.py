@@ -13,6 +13,8 @@ import numpy as np
 import torch
 
 from tracker.multitracker import JDETracker
+from tracker.tracker import BYTETracker
+# from tracker.byte_tracker import BYTETracker
 from tracking_utils import visualization as vis
 from tracking_utils.log import logger
 from tracking_utils.timer import Timer
@@ -70,7 +72,10 @@ def write_results_score(filename, results, data_type):
 def eval_seq(opt, dataloader, data_type, result_filename, save_dir=None, show_image=True, frame_rate=30, use_cuda=True):
     if save_dir:
         mkdir_if_missing(save_dir)
-    tracker = JDETracker(opt, frame_rate=frame_rate)
+    if opt.use_byte:
+        tracker = BYTETracker(opt, frame_rate=frame_rate)
+    else:
+        tracker = JDETracker(opt, frame_rate=frame_rate)
     timer = Timer()
     results = []
     frame_id = 0
@@ -169,7 +174,7 @@ def main(opt, data_root='/data/MOT16/train', det_root=None, seqs=('MOT16-05',), 
 
 
 if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     opt = opts().init()
 
     if not opt.val_mot16:
@@ -347,7 +352,7 @@ if __name__ == '__main__':
     main(opt,
          data_root=data_root,
          seqs=seqs,
-         exp_name='sporstsdata_test_ch_hrnet18_byte_epoch25_buffer150',
+         exp_name='sporstsdata_test_ch_hrnet18_number_byte_id0.8',
          show_image=False,
          save_images=False,
          save_videos=False)

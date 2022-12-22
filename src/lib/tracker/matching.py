@@ -105,7 +105,7 @@ def embedding_distance(tracks, detections, metric='cosine'):
     #for i, track in enumerate(tracks):
         #cost_matrix[i, :] = np.maximum(0.0, cdist(track.smooth_feat.reshape(1,-1), det_features, metric))
     track_features = np.asarray([track.smooth_feat for track in tracks], dtype=np.float)
-    cost_matrix = np.maximum(0.0, cdist(track_features, det_features, metric))  # Nomalized features
+    cost_matrix = np.maximum(0.0, cdist(track_features, det_features, metric))  # Nomalized features 1-cosine similarity
     return cost_matrix
 
 
@@ -122,7 +122,7 @@ def gate_cost_matrix(kf, cost_matrix, tracks, detections, only_position=False):
     return cost_matrix
 
 
-def fuse_motion(kf, cost_matrix, tracks, detections, only_position=False, lambda_=0.98):
+def fuse_motion(kf, cost_matrix,tracks, detections, only_position=False, lambda_id=0.9,lambda_motion=0.02,number_cost_matrix=None):#相似性越大,dist越小,cost越小
     if cost_matrix.size == 0:
         return cost_matrix
     gating_dim = 2 if only_position else 4
@@ -132,5 +132,39 @@ def fuse_motion(kf, cost_matrix, tracks, detections, only_position=False, lambda
         gating_distance = kf.gating_distance(
             track.mean, track.covariance, measurements, only_position, metric='maha')
         cost_matrix[row, gating_distance > gating_threshold] = np.inf
-        cost_matrix[row] = lambda_ * cost_matrix[row] + (1 - lambda_) * gating_distance
+        if number_cost_matrix is not None:
+            cost_matrix[row] = lambda_id * cost_matrix[row] + lambda_motion * gating_distance+(1-lambda_id-lambda_motion)*number_cost_matrix[row]
+        else:
+            cost_matrix[row] = (1-lambda_motion) * cost_matrix[row] + lambda_motion * gating_distance
+    return cost_matrix
+
+# def fuse_number(cost_matrix, tracks, detections, lambda_id=0.96,lambda_motion=0.02):
+#     if cost_matrix.size == 0:
+#         return cost_matrix
+#     gating_dim = 2 if only_position else 4
+#     gating_threshold = kalman_filter.chi2inv95[gating_dim]
+#     measurements = np.asarray([det.to_xyah() for det in detections])
+#     for row, track in enumerate(tracks):
+#         gating_distance = kf.gating_distance(
+#             track.mean, track.covariance, measurements, only_position, metric='maha')
+#         cost_matrix[row, gating_distance > gating_threshold] = np.inf
+#         cost_matrix[row] = lambda_ * cost_matrix[row] + (1 - lambda_) * gating_distance
+#     return cost_matrix
+
+def number_embedding_distance(tracks, detections, metric='cosine'):
+    """
+    :param tracks: list[STrack]
+    :param detections: list[BaseTrack]
+    :param metric:
+    :return: cost_matrix np.ndarray
+    """
+
+    cost_matrix = np.zeros((len(tracks), len(detections)), dtype=np.float)
+    if cost_matrix.size == 0:
+        return cost_matrix
+    det_features = np.asarray([track.curr_number_feat for track in detections], dtype=np.float)
+    #for i, track in enumerate(tracks):
+        #cost_matrix[i, :] = np.maximum(0.0, cdist(track.smooth_feat.reshape(1,-1), det_features, metric))
+    track_features = np.asarray([track.smooth_number_feat for track in tracks], dtype=np.float)
+    cost_matrix = np.maximum(0.0, cdist(track_features, det_features, metric))  # Nomalized features
     return cost_matrix

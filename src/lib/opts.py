@@ -16,7 +16,7 @@ class opts(object):
     self.parser.add_argument('--test', action='store_true')
     # self.parser.add_argument('--load_model', default='../models/ctdet_coco_dla_2x.pth',
     #                          help='path to pretrained model')
-    self.parser.add_argument('--load_model', default='../models/crowdhuman_hrnet18/model_60.pth',
+    self.parser.add_argument('--load_model', default='../models/sportsmot_data_ch_hrnet18/model_last.pth',
                              help='path to pretrained model')
     # self.parser.add_argument('--load_model', default='',
     #                          help='path to pretrained model')
@@ -117,8 +117,9 @@ class opts(object):
     self.parser.add_argument('--val_mot16', default=False, help='val mot16 or mot15')
     self.parser.add_argument('--test_mot17', default=False, help='test mot17')
     self.parser.add_argument('--val_mot17', default=False, help='val mot17')
+    self.parser.add_argument('--val_sportsmot', default=False, help='val sportsmot')
     self.parser.add_argument('--val_sportsmot_data', default=False, help='val sportsmot_data')
-    self.parser.add_argument('--test_sportsmot_data', default=False, help='test sportsmot_data')
+    self.parser.add_argument('--test_sportsmot_data', default=True, help='test sportsmot_data')
     self.parser.add_argument('--val_mot20', default=False, help='val mot20')
     self.parser.add_argument('--test_mot20', default=False, help='test mot20')
     self.parser.add_argument('--val_hie', default=False, help='val hie')
@@ -134,6 +135,12 @@ class opts(object):
                              help='path to the input video')
     self.parser.add_argument('--output-format', type=str, default='video', help='video or text')
     self.parser.add_argument('--output-root', type=str, default='../demos', help='expected output root path')
+    self.parser.add_argument('--load_number_model', default='../models/number/model_best.pth.tar',
+                             help='path to pretrained model')
+    self.parser.add_argument('--fuse_number', action='store_true',help='fuse id motion number')
+    self.parser.add_argument('--use_byte', action='store_true',help='use byte')
+    self.parser.add_argument('--lambda_id', type=float, default=0.8,help='fuse id weights')
+    self.parser.add_argument('--lambda_motion', type=float, default=0.02,help='fuse motion weights')
 
     # mot
     self.parser.add_argument('--data_cfg', type=str,
