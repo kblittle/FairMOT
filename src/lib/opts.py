@@ -51,7 +51,7 @@ class opts(object):
                              help='visualization threshold.')
     
     # model
-    self.parser.add_argument('--arch', default='dla_34', 
+    self.parser.add_argument('--arch', default='hrnet_18',
                              help='model architecture. Currently tested'
                                   'resdcn_34 | resdcn_50 | resfpndcn_34 |'
                                   'dla_34 | hrnet_18')
@@ -115,13 +115,15 @@ class opts(object):
     self.parser.add_argument('--val_mot15', default=False, help='val mot15')
     self.parser.add_argument('--test_mot15', default=False, help='test mot15')
     self.parser.add_argument('--val_mot16', default=False, help='val mot16 or mot15')
-    self.parser.add_argument('--test_mot17', default=False, help='test mot17')
-    self.parser.add_argument('--val_mot17', default=False, help='val mot17')
+    self.parser.add_argument('--test_mot17', action='store_true', help='test mot17')
+    self.parser.add_argument('--test_mot17_full', action='store_true', help='test mot17')
+    self.parser.add_argument('--val_mot17', action='store_true', help='val mot17')
+    self.parser.add_argument('--val_mot17_full', action='store_true', help='val mot17')
     self.parser.add_argument('--val_sportsmot', default=False, help='val sportsmot')
-    self.parser.add_argument('--val_sportsmot_data', default=False, help='val sportsmot_data')
-    self.parser.add_argument('--test_sportsmot_data', default=True, help='test sportsmot_data')
-    self.parser.add_argument('--val_mot20', default=False, help='val mot20')
-    self.parser.add_argument('--test_mot20', default=False, help='test mot20')
+    self.parser.add_argument('--val_sportsmot_data', action='store_true', help='val sportsmot_data')
+    self.parser.add_argument('--test_sportsmot_data',  action='store_true', help='test sportsmot_data')
+    self.parser.add_argument('--val_mot20', action='store_true', help='val mot20')
+    self.parser.add_argument('--test_mot20', action='store_true', help='test mot20')
     self.parser.add_argument('--val_hie', default=False, help='val hie')
     self.parser.add_argument('--test_hie', default=False, help='test hie')
     self.parser.add_argument('--conf_thres', type=float, default=0.4, help='confidence thresh for tracking')
@@ -131,15 +133,34 @@ class opts(object):
     self.parser.add_argument('--track_buffer', type=int, default=150, help='tracking buffer')
     self.parser.add_argument('--min-box-area', type=float, default=100, help='filter out tiny boxes')
     self.parser.add_argument('--input-video', type=str,
-                             default='../videos/MOT16-03.mp4',
+                             # default='../videos/MOT16-03.mp4',
+                             default='../videos/v_00HRwkvvjtQ_c008.mp4',
                              help='path to the input video')
     self.parser.add_argument('--output-format', type=str, default='video', help='video or text')
     self.parser.add_argument('--output-root', type=str, default='../demos', help='expected output root path')
     self.parser.add_argument('--load_number_model', default='../models/number/model_best.pth.tar',
                              help='path to pretrained model')
+    self.parser.add_argument('--exp_name', default=None,help='path to save exp results')
+    self.parser.add_argument('--save_images',action='store_true',help='path to save exp results')
     self.parser.add_argument('--fuse_number', action='store_true',help='fuse id motion number')
+
     self.parser.add_argument('--use_byte', action='store_true',help='use byte')
-    self.parser.add_argument('--lambda_id', type=float, default=0.8,help='fuse id weights')
+
+    #botsort
+    self.parser.add_argument('--use_gmc', action='store_true',help='botsort')
+    self.parser.add_argument("--cmc-method", default="sparseOptFlow", type=str, help="cmc method: files (Vidstab GMC) | sparseOptFlow | orb | ecc | none")
+    #simpletrack
+    self.parser.add_argument('--use_EG_fuse', action='store_true',help='simpletrack')
+
+    #stongsort
+    self.parser.add_argument('--use_GSI', action='store_true',help='stongsort')
+    self.parser.add_argument('--use_AFLink', action='store_true',help='stongsort')
+    # self.parser.add_argument('--path_AFLink', default='../models/AFLink/MOT17/AFLink_epoch20.pth',help='use byte')
+    self.parser.add_argument('--path_AFLink', default='..models/AFLink/sportsmot/newmodel_epoch20_tmp.pth',help='use byte')
+
+    #by self
+    self.parser.add_argument('--use_2d', action='store_true',help='detections=u_detections+u_detections_second')#作用很小
+    self.parser.add_argument('--lambda_id', type=float, default=0.6,help='fuse id weights')
     self.parser.add_argument('--lambda_motion', type=float, default=0.02,help='fuse motion weights')
 
     # mot

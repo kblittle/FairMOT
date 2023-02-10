@@ -25,7 +25,8 @@ def resize_image(image, max_size=800):
     return image
 
 
-def plot_tracking(image, tlwhs, obj_ids, scores=None, frame_id=0, fps=0., ids2=None):
+def plot_tracking(image, tlwhs, obj_ids, guijidata,scores=None, frame_id=0, fps=0., ids2=None):
+
     im = np.ascontiguousarray(np.copy(image))
     im_h, im_w = im.shape[:2]
 
@@ -49,8 +50,24 @@ def plot_tracking(image, tlwhs, obj_ids, scores=None, frame_id=0, fps=0., ids2=N
         _line_thickness = 1 if obj_id <= 0 else line_thickness
         color = get_color(abs(obj_id))
         cv2.rectangle(im, intbox[0:2], intbox[2:4], color=color, thickness=line_thickness)
+
         cv2.putText(im, id_text, (intbox[0], intbox[1] + 30), cv2.FONT_HERSHEY_PLAIN, text_scale, (0, 0, 255),
                     thickness=text_thickness)
+        plotData = guijidata[obj_ids[i]]
+        length = 20
+        if len(plotData) == 1:
+            x1,y1,w,h = plotData[0]
+            cv2.circle(im,(int(x1+w/2),int(y1+h/2)),1,color,line_thickness)
+        elif len(plotData) in range(length):
+            for index,value in enumerate(plotData[1:]):
+                x0,y0,w0,h0 = plotData[index]
+                x1,y1,w,h = value
+                cv2.line(im,(int(x0+w0/2),int(y0+h0/2)),(int(x1+w/2),int(y1+h/2)),color,line_thickness)
+        else:
+            for index,value in enumerate(plotData[len(plotData)-(length-1):]):
+                x0,y0,w0,h0 = plotData[len(plotData)-length+index]
+                x1,y1,w,h = value
+                cv2.line(im,(int(x0+w0/2),int(y0+h0/2)),(int(x1+w/2),int(y1+h/2)),color,line_thickness)
     return im
 
 

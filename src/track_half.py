@@ -13,12 +13,15 @@ import numpy as np
 import torch
 
 from tracker.multitracker import JDETracker
+from tracker.bytetracker import BYTETracker
 from tracking_utils import visualization as vis
 from tracking_utils.log import logger
 from tracking_utils.timer import Timer
 from tracking_utils.evaluation import Evaluator
 import datasets.dataset.jde as datasets
 
+from GSI import GSInterpolation
+from AFLink.AppFreeLink import *
 from tracking_utils.utils import mkdir_if_missing
 from opts import opts
 
@@ -48,7 +51,12 @@ def write_results(filename, results, data_type):
 def eval_seq(opt, dataloader, data_type, result_filename, save_dir=None, show_image=True, frame_rate=30):
     if save_dir:
         mkdir_if_missing(save_dir)
-    tracker = JDETracker(opt, frame_rate=frame_rate)
+    if opt.use_byte:
+        tracker = BYTETracker(opt, frame_rate=frame_rate)
+    else:
+        tracker = JDETracker(opt, frame_rate=frame_rate)
+
+    # tracker = JDETracker(opt, frame_rate=frame_rate)
     timer = Timer()
     results = []
     len_all = len(dataloader)
@@ -99,7 +107,10 @@ def main(opt, data_root='/data/MOT16/train', det_root=None, seqs=('MOT16-05',), 
     result_root = os.path.join(data_root, '..', 'results', exp_name)
     mkdir_if_missing(result_root)
     data_type = 'mot'
-
+    if opt.use_AFLink:
+        AFLink_model = PostLinker()
+        AFLink_model.load_state_dict(torch.load(opt.path_AFLink))
+        AFLink_dataset = LinkData('', '')
     # run tracking
     accs = []
     n_frame = 0
@@ -116,6 +127,25 @@ def main(opt, data_root='/data/MOT16/train', det_root=None, seqs=('MOT16-05',), 
         n_frame += nf
         timer_avgs.append(ta)
         timer_calls.append(tc)
+
+        if opt.use_AFLink:
+            linker = AFLink(
+                path_in=result_filename,
+                path_out=result_filename,
+                model=AFLink_model,
+                dataset=AFLink_dataset,
+                thrT=(-10, 30),  # (-10, 30) for CenterTrack, FairMOT, TransTrack.
+                thrS=75,
+                thrP=0.10  # 0.10 for CenterTrack, FairMOT, TransTrack.
+            )
+            linker.link()
+        if opt.use_GSI:
+            GSInterpolation(
+                path_in=result_filename,
+                path_out=result_filename,
+                interval=20,
+                tau=10
+            )
 
         # eval
         logger.info('Evaluate seq: {}'.format(seq))
@@ -145,7 +175,7 @@ def main(opt, data_root='/data/MOT16/train', det_root=None, seqs=('MOT16-05',), 
 
 
 if __name__ == '__main__':
-    torch.cuda.set_device(2)
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     opt = opts().init()
 
     if not opt.val_mot16:
@@ -240,7 +270,8 @@ if __name__ == '__main__':
     main(opt,
          data_root=data_root,
          seqs=seqs,
-         exp_name='mot17_half_yolov5s',
+         exp_name=opt.exp_name,
+         # exp_name='sporstsdata_val_ch_hrnet18_byte_AFLink',
          show_image=False,
          save_images=False,
          save_videos=False)

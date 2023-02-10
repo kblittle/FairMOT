@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import tqdm
+
 import _init_paths
 import os
 import os.path as osp
@@ -13,7 +15,7 @@ import numpy as np
 import torch
 
 from tracker.multitracker import JDETracker
-from tracker.tracker import BYTETracker
+from tracker.bytetracker import BYTETracker
 # from tracker.byte_tracker import BYTETracker
 from tracking_utils import visualization as vis
 from tracking_utils.log import logger
@@ -21,6 +23,8 @@ from tracking_utils.timer import Timer
 from tracking_utils.evaluation import Evaluator
 import datasets.dataset.jde as datasets
 
+from GSI import GSInterpolation
+from AFLink.AppFreeLink import *
 from tracking_utils.utils import mkdir_if_missing
 from opts import opts
 
@@ -79,11 +83,12 @@ def eval_seq(opt, dataloader, data_type, result_filename, save_dir=None, show_im
     timer = Timer()
     results = []
     frame_id = 0
-    #for path, img, img0 in dataloader:
-    for i, (path, img, img0) in enumerate(dataloader):
-        #if i % 8 != 0:
-            #continue
-        if frame_id % 20 == 0:
+    dtdata = {}
+    # for path, img, img0 in dataloader:
+    for i, (path, img, img0) in tqdm.tqdm(enumerate(dataloader)):
+        # if frame_id > 200:  # save image results
+        #     break
+        if frame_id % 100 == 0:
             logger.info('Processing frame {} ({:.2f} fps)'.format(frame_id, 1. / max(1e-5, timer.average_time)))
 
         # run tracking
@@ -95,7 +100,7 @@ def eval_seq(opt, dataloader, data_type, result_filename, save_dir=None, show_im
         online_targets = tracker.update(blob, img0)
         online_tlwhs = []
         online_ids = []
-        #online_scores = []
+        # online_scores = []
         for t in online_targets:
             tlwh = t.tlwh
             tid = t.track_id
@@ -103,38 +108,55 @@ def eval_seq(opt, dataloader, data_type, result_filename, save_dir=None, show_im
             if tlwh[2] * tlwh[3] > opt.min_box_area and not vertical:
                 online_tlwhs.append(tlwh)
                 online_ids.append(tid)
-                #online_scores.append(t.score)
+                # online_scores.append(t.score)
         timer.toc()
         # save results
         results.append((frame_id + 1, online_tlwhs, online_ids))
-        #results.append((frame_id + 1, online_tlwhs, online_ids, online_scores))
+
+        for index,value in enumerate(online_ids):
+            try:
+                dtdata[value].append(online_tlwhs[index])
+            except:
+                dtdata[value] = []
+                dtdata[value].append(online_tlwhs[index])
+
+        # results.append((frame_id + 1, online_tlwhs, online_ids, online_scores))
         if show_image or save_dir is not None:
             online_im = vis.plot_tracking(img0, online_tlwhs, online_ids, frame_id=frame_id,
-                                          fps=1. / timer.average_time)
+                                          fps=1. / timer.average_time,guijidata = dtdata)
         if show_image:
             cv2.imshow('online_im', online_im)
+            key = cv2.waitKey(1)
         if save_dir is not None:
             cv2.imwrite(os.path.join(save_dir, '{:05d}.jpg'.format(frame_id)), online_im)
         frame_id += 1
     # save results
+
     write_results(result_filename, results, data_type)
-    #write_results_score(result_filename, results, data_type)
+    # write_results_score(result_filename, results, data_type)
     return frame_id, timer.average_time, timer.calls
 
 
 def main(opt, data_root='/data/MOT16/train', det_root=None, seqs=('MOT16-05',), exp_name='demo',
          save_images=False, save_videos=False, show_image=True):
     logger.setLevel(logging.INFO)
-    result_root = os.path.join(data_root, '..', 'results', exp_name)
+    # result_root = os.path.join(data_root, '..', 'results', exp_name)
+    result_root = os.path.join('..', 'results', exp_name)
     mkdir_if_missing(result_root)
     data_type = 'mot'
-
+    if opt.use_AFLink:
+        AFLink_model = PostLinker()
+        AFLink_model.load_state_dict(torch.load(opt.path_AFLink))
+        AFLink_dataset = LinkData('', '')
     # run tracking
     accs = []
     n_frame = 0
     timer_avgs, timer_calls = [], []
-    for seq in seqs:
-        output_dir = os.path.join(data_root, '..', 'outputs', exp_name, seq) if save_images or save_videos else None
+    for seq in tqdm.tqdm(seqs):
+        # output_dir = os.path.join(data_root, '..', 'outputs', exp_name, seq) if save_images or save_videos else None
+        # if seq != 'v_HdiyOtliFiw_c003':#保存特定序列的图片结果
+        #     continue
+        output_dir = os.path.join('..', 'outputs', exp_name, seq) if save_images or save_videos else None
         logger.info('start seq: {}'.format(seq))
         dataloader = datasets.LoadImages(osp.join(data_root, seq, 'img1'), opt.img_size)
         result_filename = os.path.join(result_root, '{}.txt'.format(seq))
@@ -145,6 +167,25 @@ def main(opt, data_root='/data/MOT16/train', det_root=None, seqs=('MOT16-05',), 
         n_frame += nf
         timer_avgs.append(ta)
         timer_calls.append(tc)
+
+        if opt.use_AFLink:
+            linker = AFLink(
+                path_in=result_filename,
+                path_out=result_filename,
+                model=AFLink_model,
+                dataset=AFLink_dataset,
+                thrT=(-10, 30),  # (-10, 30) for CenterTrack, FairMOT, TransTrack.
+                thrS=75,
+                thrP=0.10  # 0.10 for CenterTrack, FairMOT, TransTrack.
+            )
+            linker.link()
+        if opt.use_GSI:
+            GSInterpolation(
+                path_in=result_filename,
+                path_out=result_filename,
+                interval=20,
+                tau=10
+            )
 
         # eval
         logger.info('Evaluate seq: {}'.format(seq))
@@ -184,7 +225,7 @@ if __name__ == '__main__':
                       PETS09-S2L1
                       TUD-Campus
                       TUD-Stadtmitte'''
-        #seqs_str = '''TUD-Campus'''
+        # seqs_str = '''TUD-Campus'''
         data_root = os.path.join(opt.data_dir, 'MOT15/images/train')
     else:
         seqs_str = '''MOT16-02
@@ -203,8 +244,8 @@ if __name__ == '__main__':
                       MOT16-08
                       MOT16-12
                       MOT16-14'''
-        #seqs_str = '''MOT16-01 MOT16-07 MOT16-12 MOT16-14'''
-        #seqs_str = '''MOT16-06 MOT16-08'''
+        # seqs_str = '''MOT16-01 MOT16-07 MOT16-12 MOT16-14'''
+        # seqs_str = '''MOT16-06 MOT16-08'''
         data_root = os.path.join(opt.data_dir, 'MOT16/test')
     if opt.test_mot15:
         seqs_str = '''ADL-Rundle-1
@@ -265,7 +306,6 @@ if __name__ == '__main__':
                       MOT20-08
                       '''
         data_root = os.path.join(opt.data_dir, 'MOT20/images/test')
-
     if opt.val_sportsmot:
         seqs_str = '''  v_00HRwkvvjtQ_c001
                         v_00HRwkvvjtQ_c003
@@ -352,9 +392,10 @@ if __name__ == '__main__':
     main(opt,
          data_root=data_root,
          seqs=seqs,
-         exp_name='sporstsdata_test_ch_hrnet18_number_byte_id0.8',
+         exp_name=opt.exp_name,
+         # exp_name='sporstsdata_val_ch_hrnet18_byte_AFLink',
          show_image=False,
-         save_images=False,
+         save_images=opt.save_images,
          save_videos=False)
     # main(opt,
     #      data_root=data_root,
